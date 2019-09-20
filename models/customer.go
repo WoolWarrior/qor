@@ -178,40 +178,37 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 		panic(fmt.Sprintf("Unexpected resource! T: %T", r))
 	}
 
+	tableName := "Customers"
+
 	customer.FindOneHandler = func(result interface{}, metaValues *resource.MetaValues, context *qor.Context) error {
 		fmt.Println("FindOneHandler")
 		if customer.HasPermission(roles.Read, context) {
 
-			dbcustomerTMP2 := CustomerStringID{}
-
-			DeepCopy(dbcustomerTMP2, &result)
+			customerIDString := context.ResourceID
 
 			// input to define the data to
 			input := &dynamodb.GetItemInput{
 				Key: map[string]*dynamodb.AttributeValue{
 					"ID": {
-						S: aws.String(context.ResourceID),
+						S: aws.String(customerIDString),
 					},
 				},
-				TableName: aws.String("Customers"),
+				TableName: aws.String(tableName),
 			}
 
-			result2, err2 := svc.GetItem(input)
-			fmt.Println(result2)
-			fmt.Println(result2.Item)
+			resultFromDB, err := svc.GetItem(input)
 
-			err2 = dynamodbattribute.UnmarshalMap(result2.Item, &dbcustomerTMP2)
+			dbCustomer := CustomerStringID{}
+			err = dynamodbattribute.UnmarshalMap(resultFromDB.Item, &dbCustomer)
 
-			if err2 != nil {
-				panic(fmt.Sprintf("Failed to unmarshal Record, %v", err2))
+			if err != nil {
+				panic(fmt.Sprintf("Failed to unmarshal Record, %v", err))
 			}
 
-			// var buf bytes.Buffer
-			// json.NewEncoder(&buf).Encode(dbcustomerTMP2)
-			// json.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(&result)
-			DeepCopy(dbcustomerTMP2, &result)
+			DeepCopy(dbCustomer, &result)
+			fmt.Println("Found item: ", dbCustomer)
 
-			return err2
+			return err
 
 		}
 
@@ -219,50 +216,42 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 	}
 
 	customer.FindManyHandler = func(result interface{}, context *qor.Context) error {
-		fmt.Println("FindManyHandler 2")
+		fmt.Println("FindManyHandler")
 		if customer.HasPermission(roles.Read, context) {
 
-			// var dbcustomers []Customer
-			// err := table.Scan().All(&dbcustomers)
-
-			// var buf bytes.Buffer
-			// json.NewEncoder(&buf).Encode(dbcustomers)
-			// json.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(&result)
-
 			input := &dynamodb.ScanInput{
-				TableName: aws.String("Customers"),
+				TableName: aws.String(tableName),
 			}
 
-			result2, err2 := svc.Scan(input)
+			resultFromDB, err := svc.Scan(input)
 
-			if err2 != nil {
+			if err != nil {
 				fmt.Println("Query API call failed:")
-				fmt.Println((err2.Error()))
+				fmt.Println((err.Error()))
 				os.Exit(1)
 			}
 
-			dbcustomers2 := make([]CustomerStringID, 0)
-
+			// create a slice to store result
+			dbCustomers := make([]CustomerStringID, 0)
 			numResult := 0
-			for _, i := range result2.Items {
+
+			for _, i := range resultFromDB.Items {
 				dbcustomersTMP := CustomerStringID{}
-				err2 = dynamodbattribute.UnmarshalMap(i, &dbcustomersTMP)
-				if err2 != nil {
+				err = dynamodbattribute.UnmarshalMap(i, &dbcustomersTMP)
+				if err != nil {
 					fmt.Println("Got error unmarshalling:")
-					fmt.Println(err2.Error())
+					fmt.Println(err.Error())
 					os.Exit(1)
 				}
-				dbcustomers2 = append(dbcustomers2, dbcustomersTMP)
+				dbCustomers = append(dbCustomers, dbcustomersTMP)
 				numResult++
-				fmt.Println("number of result: ", numResult)
 
 			}
 
-			var buf bytes.Buffer
-			json.NewEncoder(&buf).Encode(dbcustomers2)
-			json.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(&result)
-			fmt.Println("Got the table ")
-			return err2
+			DeepCopy(dbCustomers, &result)
+
+			fmt.Println("Found", numResult, "result(s) as below: ", dbCustomers)
+			return err
 		}
 
 		return roles.ErrPermissionDenied
@@ -272,30 +261,19 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 		fmt.Println("SaveHandler")
 		if customer.HasPermission(roles.Create, context) || customer.HasPermission(roles.Update, context) {
 
-			tmpUUID, _ := uuid.Parse("00000000-0000-0000-0000-000000000000")
+			nilUUID, _ := uuid.Parse("00000000-0000-0000-0000-000000000000")
 
-			var dummyCustomerTMP Customer
+			var customerTMP Customer
 
-			var buf bytes.Buffer
-			json.NewEncoder(&buf).Encode(result)
-			json.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(&dummyCustomerTMP)
+			DeepCopy(result, &customerTMP)
 
 			// var err error
 
-			if dummyCustomerTMP.ID == tmpUUID {
-				dummyCustomerTMP.ID, _ = uuid.NewRandom()
+			if customerTMP.ID == nilUUID {
+				customerTMP.ID, _ = uuid.NewRandom()
 			}
 
-			// type CustomerStringID struct {
-			// 	ID          string
-			// 	CreatedAt   time.Time
-			// 	UpdatedAt   time.Time
-			// 	DeletedAt   *time.Time `sql:"index"`
-			// 	Name        string
-			// 	Description string
-			// }
-
-			fmt.Println(dummyCustomerTMP)
+			fmt.Println(customerTMP)
 
 			input := &dynamodb.UpdateItemInput{
 				ExpressionAttributeNames: map[string]*string{
@@ -306,10 +284,10 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 				},
 				ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 					":name": {
-						S: aws.String(dummyCustomerTMP.Name),
+						S: aws.String(customerTMP.Name),
 					},
 					":description": {
-						S: aws.String(dummyCustomerTMP.Description),
+						S: aws.String(customerTMP.Description),
 					},
 					// ":createdat": {
 					// 	S: aws.String(dummyCustomerTMP.CreatedAt.String()),
@@ -321,22 +299,23 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 
 				Key: map[string]*dynamodb.AttributeValue{
 					"ID": {
-						S: aws.String(dummyCustomerTMP.ID.String()),
+						S: aws.String(customerTMP.ID.String()),
 					},
 				},
 				ReturnValues:     aws.String("UPDATED_NEW"),
-				TableName:        aws.String("Customers"),
+				TableName:        aws.String(tableName),
 				UpdateExpression: aws.String("SET #N =:name, #D =:description"),
 			}
 
-			_, err2 := svc.UpdateItem(input)
+			_, err := svc.UpdateItem(input)
 
-			// err = table.Put(dummyCustomerTMP).Run()
-			if err2 != nil {
-				fmt.Println(err2.Error())
+			if err != nil {
+				fmt.Println(err.Error())
 			}
 
-			return err2
+			fmt.Println("Successfully updated ", customerTMP)
+
+			return err
 
 		}
 		return roles.ErrPermissionDenied
@@ -345,18 +324,18 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 	customer.DeleteHandler = func(result interface{}, context *qor.Context) error {
 		fmt.Println("DeleteHandler")
 		if customer.HasPermission(roles.Delete, context) {
-			var dbcustomerTMP Customer
-			dbcustomerTMP.ID, _ = uuid.Parse(context.ResourceID)
+			// var dbCustomerTMP Customer
+			// dbCustomerTMP.ID, _ = uuid.Parse(context.ResourceID)
 
-			// err := table.Delete("ID", dbcustomerTMP.ID).Run()
+			customerIDString := context.ResourceID
 
 			input := &dynamodb.DeleteItemInput{
 				Key: map[string]*dynamodb.AttributeValue{
 					"ID": {
-						S: aws.String(dbcustomerTMP.ID.String()),
+						S: aws.String(customerIDString),
 					},
 				},
-				TableName: aws.String("Customers"),
+				TableName: aws.String(tableName),
 			}
 
 			_, err := svc.DeleteItem(input)
@@ -366,7 +345,7 @@ func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 				return nil
 			}
 
-			fmt.Println("Deleted '" + "" + "' (" + "movieYear" + ") from table " + "Customers")
+			fmt.Println("Deleted ", customerIDString)
 
 			return err
 		}
