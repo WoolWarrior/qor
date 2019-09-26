@@ -19,6 +19,7 @@ import (
 	"github.com/qor/roles"
 )
 
+// Customer data structure
 type Customer struct {
 	// ID          uuid.UUID `gorm:"primary_key;type:uuid;default:uuid_generate_v4()"`
 	ID          string
@@ -36,6 +37,7 @@ func DeepCopy(source interface{}, destination interface{}) {
 	json.NewDecoder(bytes.NewBuffer(buf.Bytes())).Decode(&destination)
 }
 
+// ConfigureQorResourceDynamoDB is to configure the resource to DynamoDB CRUD
 func ConfigureQorResourceDynamoDB(r resource.Resourcer) {
 	// Configure resource with DynamoDB
 	config := &aws.Config{

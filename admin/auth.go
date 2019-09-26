@@ -10,11 +10,13 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 
-	"github.com/nerney/dappy"
+	// "github.com/nerney/dappy"
 
 	"github.com/qor/admin"
 	"github.com/qor/qor"
 	"github.com/sirupsen/logrus"
+
+	"qor-admin-3/admin/ldap"
 )
 
 // Auth is a structure to handle authentication for QOR. It will satisify the
@@ -72,14 +74,14 @@ func (a *auth) PostLogin(c *gin.Context) {
 		return
 	}
 
-	var client dappy.Client
+	var client ldap.Client
 	var err error
 
 	// create a new client
-	if client, err = dappy.New(dappy.Config{
+	if client, err = ldap.New(ldap.Config{
 		BaseDN: "dc=example,dc=com",
 		Filter: "uid",
-		ROUser: dappy.User{Name: "cn=read-only-admin,dc=example,dc=com", Pass: "password"},
+		ROUser: ldap.User{Name: "cn=read-only-admin,dc=example,dc=com", Pass: "password"},
 		Host:   "ldap.forumsys.com:389",
 	}); err != nil {
 		panic(err)
