@@ -93,20 +93,27 @@ func (a *auth) PostLogin(c *gin.Context) {
 
 	// attempt the authentication
 	if err := client.Auth(email, password); err != nil {
-		panic(err)
+		session := sessions.Default(c)
+		session.Delete(a.session.key)
+		if err := session.Save(); err != nil {
+			logrus.WithError(err).Warn("Couldn't save session")
+		}
+		c.Redirect(http.StatusSeeOther, a.paths.login)
+		// panic(err)
 	} else {
 		log.Println("Success!")
+		session.Set(a.session.key, email)
+		fmt.Println(session)
+		err = session.Save()
+		fmt.Println("err is ", err)
+		if err != nil {
+			logrus.WithError(err).Warn("Couldn't save session")
+			c.Redirect(http.StatusSeeOther, a.paths.login)
+			return
+		}
+		c.Redirect(http.StatusSeeOther, a.paths.admin)
 	}
 
-	session.Set(a.session.key, email)
-	fmt.Println(session)
-	err = session.Save()
-	if err != nil {
-		logrus.WithError(err).Warn("Couldn't save session")
-		c.Redirect(http.StatusSeeOther, a.paths.login)
-		return
-	}
-	c.Redirect(http.StatusSeeOther, a.paths.admin)
 }
 
 // GetLogout allows the user to disconnect
@@ -130,7 +137,7 @@ func (a auth) GetCurrentUser(c *admin.Context) qor.CurrentUser {
 	}
 	if v, ok := s.Values[a.session.key]; ok {
 		email = v.(string)
-		fmt.Println(email)
+		fmt.Println("User is ", email)
 	} else {
 		return nil
 	}
